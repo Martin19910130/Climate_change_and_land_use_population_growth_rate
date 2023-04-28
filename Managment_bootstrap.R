@@ -20,6 +20,7 @@ inv_logit <- function(int, slope, sv) {
   1/(1 + exp(-(int + slope * sv)))
 }
 
+standard_error <- function(x) sd(x, na.rm = T) / sqrt(length(x))
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ##        Read and prepare data
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -334,14 +335,18 @@ booted_lambda <- do.call("rbind", lamb_list) %>% subset(!is.na(species))
 booted_lambda <- read.csv("C://Users/marti/Documents/Martin/01_PhD/02_GCEF_demografie_ipm/lambda_data/management_bootstrapped.csv")
 
 ## calculate mean lambda
-mean_lambdas <- aggregate(log(lambda) ~ species + manag, FUN = mean, data = booted_lambda, na.rm = T) %>% 
-  rename(lambda = 'log(lambda)')
+mean_lambdas <- aggregate(log(lambda) ~ species + manag, FUN = mean, data = booted_lambda, na.rm = T)
+colnames(mean_lambdas)[3] <- "lambda"
 
 ## get the quantiles 2.5% and 97.5%
 mean_lambdas$ci025 <- aggregate(log(lambda) ~ species + manag, FUN = quantile, 
                                 data = booted_lambda, na.rm = T, probs = c(0.025, 0.975))$'log(lambda)' %>% .[,1]
 mean_lambdas$ci975 <- aggregate(log(lambda) ~ species + manag, FUN = quantile, 
-                                data = booted_lambda, na.rm = T, probs = c(0.025, 0.975))$'log(lambda)' %>% .[,2] 
+                                data = booted_lambda, na.rm = T, probs = c(0.025, 0.975))$'log(lambda)' %>% .[,2]
+mean_lambdas$sd <- aggregate(log(lambda) ~ species + manag, FUN = sd, 
+                             data = booted_lambda, na.rm = T)$'log(lambda)'
+mean_lambdas$se <- aggregate(log(lambda) ~ species + manag, FUN = standard_error, 
+                             data = booted_lambda)$'log(lambda)'
 
 mean_lambdas$species_prep <- c("'(A) ' * italic('Bromus erectus')", 
                                "'(B) ' * italic('Dianthus carthusianorum')", 
@@ -359,12 +364,38 @@ boot_manag <- ggplot(mean_lambdas, aes(x = manag, y = lambda, shape = manag)) +
   ylab(expression(paste("log (", lambda, ")"))) + 
   xlab("") + 
   theme(legend.position = "none", text = element_text(size = 20), strip.text = element_text(size = 15)) 
-
 boot_manag  
 
 ggsave(filename = "C://Users/marti/Documents/Martin/01_PhD/02_GCEF_demografie_ipm/Paper_figures/manag_booted_lamb.jpeg",
        plot = boot_manag, dpi = 300, device = "jpeg", width = 2700, height = 1806, units = "px")
 
+boot_manag_sd <- ggplot(mean_lambdas, aes(x = manag, y = lambda, shape = manag)) + 
+  geom_point(position = position_dodge(.5), size = 4) + 
+  facet_wrap(~ species_prep, labeller = label_parsed) + 
+  geom_errorbar(aes(ymin = lambda - sd, ymax = lambda + sd), width = .15, position = position_dodge(.5)) + 
+  scale_shape_manual(name = "Management", values = c(17,18)) + 
+  theme_bw() + 
+  ylab(expression(paste("log (", lambda, ")"))) + 
+  xlab("") + 
+  theme(legend.position = "none", text = element_text(size = 20), strip.text = element_text(size = 15)) 
+boot_manag_sd  
+
+ggsave(filename = "C://Users/marti/Documents/Martin/01_PhD/02_GCEF_demografie_ipm/Paper_figures/manag_booted_lamb_sd.jpeg",
+       plot = boot_manag_sd, dpi = 300, device = "jpeg", width = 2700, height = 1806, units = "px")
+
+boot_manag_se <- ggplot(mean_lambdas, aes(x = manag, y = lambda, shape = manag)) + 
+  geom_point(position = position_dodge(.5), size = 4) + 
+  facet_wrap(~ species_prep, labeller = label_parsed) + 
+  geom_errorbar(aes(ymin = lambda - se, ymax = lambda + se), width = .15, position = position_dodge(.5)) + 
+  scale_shape_manual(name = "Management", values = c(17,18)) + 
+  theme_bw() + 
+  ylab(expression(paste("log (", lambda, ")"))) + 
+  xlab("") + 
+  theme(legend.position = "none", text = element_text(size = 20), strip.text = element_text(size = 15)) 
+boot_manag_se  
+
+ggsave(filename = "C://Users/marti/Documents/Martin/01_PhD/02_GCEF_demografie_ipm/Paper_figures/manag_booted_lamb_se.jpeg",
+       plot = boot_manag_se, dpi = 300, device = "jpeg", width = 2700, height = 1806, units = "px")
 ##Permutation test
 permutation <- function(species = "Bro_ere", treat1 = "mowing", treat2 = "grazing", mutations = 1000)
 {
@@ -398,5 +429,6 @@ permutation <- function(species = "Bro_ere", treat1 = "mowing", treat2 = "grazin
 
 permutation(species = "Tra_ori")
 
-usethis::edit_git_config(
-)
+test <- subset(booted_lambda, species == "Dia_car")
+
+aov(test$lambda ~ test$manag) %>% summary()
